@@ -19,10 +19,11 @@
 
 ```
 zen-pharma-backend/
-  qc-service/Dockerfile                              ← NEW
-  api-gateway/src/main/resources/application.yml    ← UPDATED (add route)
-  .github/workflows/ci-qc-service.yml               ← NEW
-  .github/workflows/ci-pr-qc-service.yml            ← NEW
+  qc-service/Dockerfile                                          ← NEW
+  api-gateway/src/main/resources/application.yml                ← UPDATED (add routes)
+  api-gateway/.../controller/MockDataController.java             ← UPDATED (remove mock /api/qc)
+  .github/workflows/ci-qc-service.yml                           ← NEW
+  .github/workflows/ci-pr-qc-service.yml                        ← NEW
 
 zen-infra/
   envs/dev/main.tf                                  ← UPDATED (add ECR repo)
@@ -489,13 +490,40 @@ configmap:
 
 The api-gateway is the single entry point for all services. It must know about qc-service.
 
-### 5.1 Add the route
+### 5.1 Remove the mock endpoint from MockDataController
+
+**File:** `zen-pharma-backend/api-gateway/src/main/java/com/pharma/gateway/controller/MockDataController.java`
+
+The api-gateway contains a `MockDataController` that was serving hardcoded dummy data at `GET /api/qc` before the real qc-service existed. **This must be removed**, otherwise the gateway will serve the fake data instead of routing to the real service — and the data will survive pod restarts because it never came from qc-service in the first place.
+
+Delete the `getQualityControl()` method from `MockDataController`:
+
+```java
+// DELETE this entire method block:
+@GetMapping(value = "/qc", produces = MediaType.APPLICATION_JSON_VALUE)
+public Mono<List<Map<String, Object>>> getQualityControl() {
+    return Mono.just(List.of(
+        Map.of("id", 1, "batchNumber", "BATCH-2024-001", ...),
+        ...
+    ));
+}
+```
+
+### 5.2 Add the routes
 
 **File:** `zen-pharma-backend/api-gateway/src/main/resources/application.yml`
 
-Add the following block after the `manufacturing-service` route, before `globalcors`:
+Add **two** route blocks after the `manufacturing-service` route, before `globalcors`:
 
 ```yaml
+        - id: qc-service-root
+          uri: "${QC_SERVICE_URL:http://qc-service:8086}"
+          predicates:
+            - Path=/api/qc
+          filters:
+            - AuthFilter
+            - RewritePath=/api/qc, /api/qc/inspections
+
         - id: qc-service
           uri: "${QC_SERVICE_URL:http://qc-service:8086}"
           predicates:
@@ -504,12 +532,17 @@ Add the following block after the `manufacturing-service` route, before `globalc
             - AuthFilter
 ```
 
-**Key points:**
+**Why two routes?**
+- Spring Cloud Gateway's `Path=/api/qc/**` predicate does **not** match the exact path `/api/qc` (without a trailing segment). It only matches `/api/qc/something`.
+- The frontend calls `GET /api/qc` (the same path the old mock served). Without the first route, that request hits no route and returns 404.
+- `qc-service-root` catches exactly `/api/qc` and rewrites it to `/api/qc/inspections` where the real controller lives.
+- `qc-service` handles all sub-path calls (`GET /api/qc/inspections/1`, `POST /api/qc/inspections`, etc.) and forwards them as-is.
+
+**Other key points:**
 - `${QC_SERVICE_URL:http://qc-service:8086}` — reads from env var with a fallback default. The env var is injected via the Helm configmap.
 - `AuthFilter` — all routes except `/api/auth/**` require a valid JWT token.
-- `/api/qc/**` — all QC endpoints will be reachable through the gateway at this path prefix.
 
-### 5.2 Add QC_SERVICE_URL to api-gateway Helm values
+### 5.3 Add QC_SERVICE_URL to api-gateway Helm values
 
 Add `QC_SERVICE_URL` to the `configmap` section in all three api-gateway values files:
 
@@ -729,4 +762,6 @@ ci-qc-service.yml triggered
 | Pod stuck in `ImagePullBackOff` | ECR repo doesn't exist yet or image tag is wrong | Run Terraform apply first; confirm image was pushed by CI |
 | Pod `CrashLoopBackOff` | Application failed to start | Run `kubectl logs -n dev <pod-name>` to see Spring Boot startup errors |
 | ArgoCD shows `OutOfSync` but won't sync | Values file not committed to gitops repo | Push values files and ArgoCD app manifests to zen-gitops |
-| Gateway returns 404 for `/api/qc/**` | Route not added to api-gateway `application.yml` or gateway not redeployed | Add route, commit, push — gateway CI pipeline redeploys automatically |
+| Gateway returns 404 for `/api/qc` | `Path=/api/qc/**` does not match the exact path `/api/qc` — a missing `qc-service-root` route or gateway not yet redeployed | Add both routes (root + wildcard) to `application.yml`, commit and push — CI redeploys the gateway automatically |
+| Data survives pod deletion / always returns same 4 records | `MockDataController` in api-gateway still has the hardcoded `GET /api/qc` mock endpoint — requests never reach the real qc-service | Remove `getQualityControl()` from `MockDataController`, commit and push |
+| Gateway returns 404 for `/api/qc/inspections` | `qc-service` wildcard route not added to `application.yml` or gateway not redeployed | Add route, commit, push — gateway CI pipeline redeploys automatically |
