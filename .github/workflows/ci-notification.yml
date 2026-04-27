@@ -76,7 +76,7 @@ jobs:
         with:
           repository: ${{ env.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_TOKEN }}
-          path: _gitops
+          path: _gitops/envs/dev/values-notification-service.yaml
 
       - name: Create branch, commit, open PR
         env:
