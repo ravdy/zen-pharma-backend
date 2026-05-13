@@ -14,7 +14,7 @@ This guide is for teams who **fork** (or copy) `zen-pharma-backend` and want Git
 
 - `YOUR_ORG` — GitHub org or user owning the fork  
 - `YOUR_AWS_ACCOUNT_ID` — 12-digit AWS account ID  
-- `YOUR_REGION` — e.g. `us-east-1` (workflows default to `us-east-1`)
+- `YOUR_REGION` — e.g. `eu-west-2` (workflows default to `eu-west-2`)
 
 ---
 
@@ -142,7 +142,7 @@ Save as `pharma-ecr-policy.json`:
         "ecr:PutImage",
         "ecr:UploadLayerPart"
       ],
-      "Resource": "arn:aws:ecr:us-east-1:020930354342:repository/*"
+      "Resource": "arn:aws:ecr:eu-west-2:020930354342:repository/*"
     }
   ]
 }

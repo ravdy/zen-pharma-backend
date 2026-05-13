@@ -468,7 +468,7 @@ Reusable workflows use **`secrets: inherit`** on service workflows, so the secre
 |---|---|
 | Auth | AWS OIDC — no long-lived access keys |
 | Role | `pharma-github-actions-role` — scoped to ECR push permissions only |
-| Image tag | `sha-<7chars>` pushed to `<account>.dkr.ecr.us-east-1.amazonaws.com/<service>` |
+| Image tag | `sha-<7chars>` pushed to `<account>.dkr.ecr.eu-west-2.amazonaws.com/<service>` |
 | Digest | SHA256 content-addressable digest captured after push for Cosign signing |
 
 > **Why AWS OIDC instead of storing `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` as secrets?**  
@@ -557,7 +557,7 @@ Approx. runtime                ~5 min           ~15 min
 | `service-name` | string | yes | — | Used in artifact names |
 | `service-dir` | string | yes | — | Directory relative to repo root |
 | `ecr-repository` | string | yes | — | ECR repo name (`_java-build.yml` only) |
-| `aws-region` | string | no | `us-east-1` | AWS region (`_java-build.yml` only) |
+| `aws-region` | string | no | `eu-west-2` | AWS region (`_java-build.yml` only) |
 | `needs-database` | boolean | no | `false` | Starts a Postgres 15 sidecar for tests |
 
 **Secrets (reusable):** `NVD_API_KEY` (optional) — NVD API key for faster OWASP Dependency Check NVD sync (repository secret, not a workflow input).
@@ -695,7 +695,7 @@ The role only needs ECR permissions — nothing else. This follows the principle
         "ecr:PutImage",
         "ecr:UploadLayerPart"
       ],
-      "Resource": "arn:aws:ecr:us-east-1:<ACCOUNT_ID>:repository/*"
+      "Resource": "arn:aws:ecr:eu-west-2:<ACCOUNT_ID>:repository/*"
     }
   ]
 }
@@ -720,7 +720,7 @@ for svc in api-gateway auth-service drug-catalog-service inventory-service \
            manufacturing-service notification-service supplier-service; do
   aws ecr create-repository \
     --repository-name "$svc" \
-    --region us-east-1 \
+    --region eu-west-2 \
     --image-scanning-configuration scanOnPush=true \
     --encryption-configuration encryptionType=AES256
 done
@@ -757,7 +757,7 @@ aws iam list-open-id-connect-providers
 aws iam get-role --role-name pharma-github-actions-role --query 'Role.Arn'
 
 # Verify ECR repos
-aws ecr describe-repositories --region us-east-1 \
+aws ecr describe-repositories --region eu-west-2 \
   --query 'repositories[].repositoryName' --output table
 
 # Verify GitHub secrets (requires gh CLI)
@@ -820,7 +820,7 @@ zen-gitops/
 Values file structure patched by CI:
 ```yaml
 image:
-  repository: <aws-account>.dkr.ecr.us-east-1.amazonaws.com/<service>
+  repository: <aws-account>.dkr.ecr.eu-west-2.amazonaws.com/<service>
   tag: sha-abc1234   # ← patched by yq on every promotion
   pullPolicy: IfNotPresent
 ```
