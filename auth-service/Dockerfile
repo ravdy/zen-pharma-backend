@@ -5,5 +5,10 @@ COPY target/*.jar app.jar
 USER pharma
 EXPOSE 8081
 ENTRYPOINT ["java", "-jar", "-Djava.security.egd=file:/dev/./urandom", "app.jar"]
+# Test the application
+
+
+
+
 
 
